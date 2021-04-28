@@ -6,7 +6,13 @@ Team Members: Sophie Veys, Alex Oro
 
 ## Q-Learning
 
-TODO write this part
+We will use the provided action matrix to randomly select actions and 
+execute them using the provided phantom movement and virtual world scripts.
+We will use the provided equation for computing Q, and will experiment 
+with the parameters. We will keep track of the previous 5 to 10 Q matrices,
+and if the change between those matrices is below a threshold, we will stop training.
+Once training is complete, we will use the Q-matrix by having the robot loop through 
+all possible actions, and perform the one that would lead to the highest Q value.
 
 ## Robot Perception
 
@@ -26,8 +32,13 @@ forward until the LIDAR sensor indicates the robot is close enough.
 ## Testing
 
 We will test the movement/navigation by visual inspection in Gazebo.
-For Q-Learning, TODO
+For Q-Learning, we will use the phantom movement script to visually 
+inspect training. We may also compute some terms of the matrix
+by hand to see if the robot is training as expected. We will also
+try training the robot multiple times, and see if it converges to similar
+answers.
 
 ## Timeline
 
-We will finish half this week, and half next week. (TODO figure out which half)
+We plan to finish the Q-learning portion by May 1st, and then complete the 
+movement and navigation by May 7th.
