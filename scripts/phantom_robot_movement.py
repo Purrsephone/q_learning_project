@@ -69,6 +69,7 @@ class PhantomRobotMovement(object):
         self.quat_orientation_of_dbs.z = quat_orientation_of_dbs_list[2]
         self.quat_orientation_of_dbs.w = quat_orientation_of_dbs_list[3]
 
+        print("started phantom robot")
 
     def execute_robot_action(self):
 
@@ -120,7 +121,7 @@ class PhantomRobotMovement(object):
 
 
     def prepare_to_take_robot_action(self, data):
-        # print(data)
+        print(data)
         self.robot_action_queue.append(RobotAction(data.robot_db, data.block_id))
 
 

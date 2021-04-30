@@ -2,13 +2,17 @@
 
 import rospy
 import numpy as np
+import random
 import os
 import keras_ocr 
 import rospy, cv2, cv_bridge, numpy
+import copy
+import time
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
+from q_learning_project.msg import RobotMoveDBToBlock, QLearningReward, QMatrix
 
-pipeline = keras_ocr.pipeline.Pipeline()
+#pipeline = keras_ocr.pipeline.Pipeline()
 #need to add images for recognition 
 #images = [img1, img2, ...]
 #prediction_groups = pipline.recognize(images)
@@ -19,38 +23,38 @@ path_prefix = os.path.dirname(__file__) + "/action_states/"
 
 
 class Perception(object):
-    def __init__self():
+    def __init__(self):
          # set up ROS / cv bridge
-                self.bridge = cv_bridge.CvBridge()
+        self.bridge = cv_bridge.CvBridge()
 
-                # initalize the debugging window
-                cv2.namedWindow("window", 1)
+        # initalize the debugging window
+        cv2.namedWindow("window", 1)
 
-                # subscribe to the robot's RGB camera data stream
-                self.image_sub = rospy.Subscriber('camera/rgb/image_raw',
-                        Image, self.image_callback)
+        # subscribe to the robot's RGB camera data stream
+        self.image_sub = rospy.Subscriber('camera/rgb/image_raw',
+                Image, self.image_callback)
 
-                self.cmd_vel_pub = rospy.Publisher('cmd_vel',
-                        Twist, queue_size=1)
+        self.cmd_vel_pub = rospy.Publisher('cmd_vel',
+                Twist, queue_size=1)
 
-                self.twist = Twist()
+        self.twist = Twist()
 
-     def image_callback(self, msg):
+    def image_callback(self, msg):
 
-                # converts the incoming ROS message to cv2 format and HSV (hue, saturation, value)
-                image = self.bridge.imgmsg_to_cv2(msg,desired_encoding='bgr8')
-                hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-                #need to define green, blue, red 
-                lower_blue = np.array([ 110, 50, 50])
-                upper_blue = np.array([130, 255, 255])
-                #maskblue = cv2.inRange(hsv, lower_blue, upper_blue)
-                lower_green = np.array([40,40,40])
-                upper_green = np.array([70,255,255])
+        # converts the incoming ROS message to cv2 format and HSV (hue, saturation, value)
+        image = self.bridge.imgmsg_to_cv2(msg,desired_encoding='bgr8')
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        #need to define green, blue, red 
+        lower_blue = np.array([ 110, 50, 50])
+        upper_blue = np.array([130, 255, 255])
+        #maskblue = cv2.inRange(hsv, lower_blue, upper_blue)
+        lower_green = np.array([40,40,40])
+        upper_green = np.array([70,255,255])
 
-                lower_red = np.array([160, 20, 70])
-                upper_red = np.array([190, 255, 255])
+        lower_red = np.array([160, 20, 70])
+        upper_red = np.array([190, 255, 255])
 
-                #gotta do something with this lmao
+        #gotta do something with this lmao
 
 
 
@@ -91,10 +95,76 @@ class QLearning(object):
         self.states = np.loadtxt(path_prefix + "states.txt")
         self.states = list(map(lambda x: list(map(lambda y: int(y), x)), self.states))
 
+        self.q_matrix = np.zeros([len(self.states), len(self.actions)])
+        self.action_publisher = rospy.Publisher('/q_learning/robot_action', RobotMoveDBToBlock, queue_size=10)
+
+        self.subscriber = rospy.Subscriber('/q_learning/reward', QLearningReward, self.get_reward)
+
+        self.current_state = 0
+        self.next_state = 0
+        self.current_action = 0
+
+        self.alpha = 1
+        self.gamma = 0.8
+        
+        self.previous_matrices = []
+        self.threshold = 0.01
+
+        time.sleep(1)
+
+        self.train_one_iteration()
+
+    def get_reward(self, reward):
+        print("got a reward")
+        
+        self.q_matrix[self.current_state][self.current_action] = self.q_matrix[self.current_state][self.current_action] + self.alpha * (reward.reward + self.gamma * max(self.q_matrix[self.next_state]) - self.q_matrix[self.current_state][self.current_action])
+        self.previous_matrices.append(copy.deepcopy(self.q_matrix))
+        self.current_state = self.next_state
+
+        if not self.is_converged(reward.iteration_num):
+            self.train_one_iteration()
+        else:
+            print("converged")
+            print(self.q_matrix)
+            self.save_q_matrix()
+
+    def is_converged(self, iteration):
+        # TODO fix this
+        if iteration < 1000:
+            return False
+        most_recent = self.previous_matrices[-1]
+        previous = self.previous_matrices[-10:-1]
+        for m in previous:
+            difference = abs(m - most_recent).max()
+            if difference > self.threshold:
+                return False
+        return True
+
+    def train_one_iteration(self):
+        rospy.loginfo("training")
+        print("current state", self.current_state)
+        print(self.action_matrix[self.current_state])
+        
+        possible_actions = [(i, int(x)) for i, x in enumerate(self.action_matrix[self.current_state]) if x != -1]
+       
+        rospy.loginfo(possible_actions)
+        if len(possible_actions) == 0:
+            self.next_state = 0
+            self.current_state = 0
+            self.current_action = 0
+            self.train_one_iteration()
+        else:
+            self.next_state, self.current_action = random.choice(possible_actions)
+            action_msg = RobotMoveDBToBlock()
+            action_msg.robot_db = self.actions[self.current_action]["dumbbell"]
+            action_msg.block_id = self.actions[self.current_action]["block"]
+            print(action_msg)
+            self.action_publisher.publish(action_msg)
+            rospy.loginfo("published action")
+
     def save_q_matrix(self):
-        # TODO: You'll want to save your q_matrix to a file once it is done to
-        # avoid retraining
-        return
+        np.savetxt("qmatrix.csv", self.q_matrix, delimiter=",")
 
 if __name__ == "__main__":
     node = QLearning()
+    rospy.spin()
