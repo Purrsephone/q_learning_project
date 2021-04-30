@@ -33,7 +33,8 @@ forward until the LIDAR sensor indicates the robot is close enough.
 
 ## Testing
 
-We will test the movement/navigation by visual inspection in Gazebo.
+We will test the movement/navigation by visual inspection in Gazebo 
+and printing the color/number values that the robot is reporting. 
 For Q-Learning, we will use the phantom movement script to visually 
 inspect training. We may also compute some terms of the matrix
 by hand to see if the robot is training as expected. We will also
