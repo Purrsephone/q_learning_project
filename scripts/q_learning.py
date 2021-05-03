@@ -4,59 +4,15 @@ import rospy
 import numpy as np
 import random
 import os
-import keras_ocr 
-import rospy, cv2, cv_bridge, numpy
 import copy
 import time
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
 from q_learning_project.msg import RobotMoveDBToBlock, QLearningReward, QMatrix
 
-#pipeline = keras_ocr.pipeline.Pipeline()
-#need to add images for recognition 
-#images = [img1, img2, ...]
-#prediction_groups = pipline.recognize(images)
-
 
 # Path of directory on where this file is located
 path_prefix = os.path.dirname(__file__) + "/action_states/"
-
-
-class Perception(object):
-    def __init__(self):
-         # set up ROS / cv bridge
-        self.bridge = cv_bridge.CvBridge()
-
-        # initalize the debugging window
-        cv2.namedWindow("window", 1)
-
-        # subscribe to the robot's RGB camera data stream
-        self.image_sub = rospy.Subscriber('camera/rgb/image_raw',
-                Image, self.image_callback)
-
-        self.cmd_vel_pub = rospy.Publisher('cmd_vel',
-                Twist, queue_size=1)
-
-        self.twist = Twist()
-
-    def image_callback(self, msg):
-
-        # converts the incoming ROS message to cv2 format and HSV (hue, saturation, value)
-        image = self.bridge.imgmsg_to_cv2(msg,desired_encoding='bgr8')
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        #need to define green, blue, red 
-        lower_blue = np.array([ 110, 50, 50])
-        upper_blue = np.array([130, 255, 255])
-        #maskblue = cv2.inRange(hsv, lower_blue, upper_blue)
-        lower_green = np.array([40,40,40])
-        upper_green = np.array([70,255,255])
-
-        lower_red = np.array([160, 20, 70])
-        upper_red = np.array([190, 255, 255])
-
-        #gotta do something with this lmao
-
-
 
 class QLearning(object):
     def __init__(self):
