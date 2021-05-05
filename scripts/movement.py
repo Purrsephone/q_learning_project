@@ -9,10 +9,7 @@ import os
 import sys
 
 # TODO
-# What if we overshoot?
 # Refactoring
-# Drop dumbbells clower to blocks
-# Maybe extend arm forward further
 # Writeup
 # Commenting
 
@@ -45,6 +42,8 @@ class Perception(object):
         self.move_group_arm = moveit_commander.MoveGroupCommander("arm")
         self.move_group_gripper = moveit_commander.MoveGroupCommander("gripper")
         self.pipeline = keras_ocr.pipeline.Pipeline()
+
+        self.move_to_block_counter = 0
 
         self.move_group_arm.go([0,0.7,0,-0.7], wait=True)
         self.move_group_gripper.go([0.01,0.01], wait=True)
@@ -89,6 +88,9 @@ class Perception(object):
         self.run()
 
     def start_next_action(self):
+        if len(self.action_queue) == 0:
+            print("I did it !")
+            sys.exit(0)
         action = self.action_queue.pop(0)
         self.target = action["dumbbell"]
         self.block_target = str(action["block"])
@@ -127,10 +129,14 @@ class Perception(object):
             elif self.state == "block":
                 self.wait_for_image_recognition()
                 #now decide what to do w self.pred groups 
-                x_avr = 50 
+                x_positions = []
                 for el in self.prediction_groups[0]:
                     if el[0] == self.block_target:
-                        x_avr = sum(el[1][0:5,0])/4 
+                        x_positions.append(sum(el[1][0:5,0])/4)
+                if len(x_positions) == 0:
+                    x_avr = 50
+                else:
+                    x_avr = sum(x_positions)/len(x_positions)
                 err = self.width/2 - x_avr 
                 if (abs(err) < 50):
                     self.state = "move_toward_block"
@@ -141,11 +147,17 @@ class Perception(object):
                 self.set_velocity(0, 0)
                 rospy.sleep(0.5)
             elif self.state == "move_toward_block":
-                if self.target_distance <= 0.95:
+                self.move_to_block_counter += 1
+                if self.move_to_block_counter >= 8 and self.target_distance > 2:
+                    self.move_to_block_counter = 0
+                    self.set_velocity(0, 0)
+                    self.state = "block"
+                    continue
+                if self.target_distance <= 0.7:
                     self.set_velocity(0, 0)
                     self.state = "drop_db"
                     continue  
-                err = self.target_distance - 0.9
+                err = self.target_distance - 0.6
                 k = 0.1
                 self.set_velocity(err * k, 0)
                 r.sleep()
