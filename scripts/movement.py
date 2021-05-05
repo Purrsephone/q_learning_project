@@ -61,12 +61,13 @@ class Perception(object):
                         vel_msg.linear.x = 0.3 * (self.target_distance - 0.22) 
                     #else:
                         #print("not moving linearly", self.target_angle)
-                    if(self.target_distance - 0.22 < 0.05):
+                    if(self.target_distance <= 0.23):
                         vel_msg.linear.x = 0 
                         vel_msg.angular.z = 0
                         self.cmd_vel_pub.publish(vel_msg) 
-                        self.move_group_gripper.go([-0.01,-0.01], wait=True)
-                        self.move_group_arm.go([0,0,0,-0.7], wait=True)
+                        self.move_group_gripper.go([-0.00,-0.00], wait=True)
+                        rospy.sleep(0.5)
+                        self.move_group_arm.go([0,-0.7,0,-0.7], wait=True)
                         self.state = "block"
                         #pick up , change states 
                     else:  
@@ -100,6 +101,12 @@ class Perception(object):
                 self.cmd_vel_pub.publish(vel_msg)
                 rospy.sleep(0.5)
             elif self.state == "move_toward_block":
+                if self.target_distance <= 0.95:
+                    vel_msg = Twist()
+                    vel_msg.linear.x = 0
+                    self.cmd_vel_pub.publish(vel_msg)
+                    self.state = "drop_db"
+                    continue  
                 err = self.target_distance - 0.9
                 print("TARG DIST")
                 print(self.target_distance)
@@ -110,6 +117,18 @@ class Perception(object):
                 print(vel_msg.linear.x)
                 self.cmd_vel_pub.publish(vel_msg)
                 r.sleep()
+            elif self.state == "drop_db":
+                self.move_group_arm.go([0,0.7,0,-0.7], wait=True)
+                self.move_group_gripper.go([0.01,0.01], wait=True)
+                vel_msg = Twist()
+                vel_msg.linear.x = -0.5
+                self.cmd_vel_pub.publish(vel_msg)
+                rospy.sleep(0.5)
+                vel_msg.linear.x = 0
+                self.cmd_vel_pub.publish(vel_msg)
+                self.state = "dumbell"
+                self.block_target = "3"
+                self.target = "red"
 
 
 
