@@ -8,49 +8,58 @@ import moveit_commander
 import os
 import sys
 
-# TODO
-# Refactoring
-# Writeup
-# Commenting
-
 path_prefix = os.path.dirname(__file__) + "/action_states/"
 
-class Perception(object):
+class WeightLifter(object):
     def __init__(self):
         rospy.init_node("movement")
 
         # set up ROS / cv bridge
         self.bridge = cv_bridge.CvBridge()
 
-        # subscribe to the robot's RGB camera data stream
+        self.initialized = False 
+
+        # Set up subscribers and publishers
         self.image_sub = rospy.Subscriber('camera/rgb/image_raw',
                 Image, self.image_callback)
-        
         self.lidar_sub = rospy.Subscriber('scan', LaserScan, self.lidar_callback)
-
         self.cmd_vel_pub = rospy.Publisher('cmd_vel',
                 Twist, queue_size=1)
-        self.initialize = False 
+
+        # Current state
+        self.state = "dumbbell"
+
+        # Locating dumbbell
+        self.target_db_visible = False
+        self.target_db_angle = 0
+
+
+        # Moving towards a block
         self.look_for_block = False 
         self.move_toward_block = False 
-        self.prediction_groups = []
-        self.target_on_screen = False
-        self.target_angle = 0
-        self.state = "dumbell"
-        self.width = 0 
-        self.target_distance = 2
-        self.move_group_arm = moveit_commander.MoveGroupCommander("arm")
-        self.move_group_gripper = moveit_commander.MoveGroupCommander("gripper")
-        self.pipeline = keras_ocr.pipeline.Pipeline()
-
+        self.prediction_groups = [] # Prediction groups for OCR
         self.move_to_block_counter = 0
 
-        self.move_group_arm.go([0,0.7,0,-0.7], wait=True)
-        self.move_group_gripper.go([0.01,0.01], wait=True)
-        qm_csv = open("qmatrix.csv")
-        qmatrix_arr = np.loadtxt(qm_csv, delimiter=",")
-        qm_csv.close()
+        # OCR
+        self.pipeline = keras_ocr.pipeline.Pipeline()
+
+        # Width of the camera
+        self.camera_width = 0
+
+        # Average distance to object in front of 
+        # robot (via LIDAR) 
+        self.front_distance = 2
+
+        # Arm movement
+        self.move_group_arm = moveit_commander.MoveGroupCommander("arm")
+        self.move_group_gripper = moveit_commander.MoveGroupCommander("gripper")
+        self.lower_arm()
+
+        # Load the QMatrix from training  
+        with open("qmatrix.csv") as qm_csv:
+            qmatrix_arr = np.loadtxt(qm_csv, delimiter=",")
         
+        # Load the action matrix
         self.action_matrix = np.loadtxt(path_prefix + "action_matrix.txt")
         colors = ["red", "green", "blue"]
         self.actions = np.loadtxt(path_prefix + "actions.txt")
@@ -69,6 +78,8 @@ class Perception(object):
                       continue
                   self.state_action[i][action] = j
 
+        # Using the Q Matrix, fill up a queue of actions
+        # to perform
         self.action_queue = []
         current_state = 0
         for i in range(3):
@@ -81,111 +92,160 @@ class Perception(object):
                     next_action = i
             current_state = int(self.state_action[current_state][next_action])
             self.action_queue.append(self.actions[next_action])
-
+        
+        # Load the first action from the queue
         self.start_next_action()
 
-        self.initialize = True 
+        # Start moving
+        self.initialized = True 
         self.run()
 
     def start_next_action(self):
+        """
+        Load the next action from the queue
+        """
         if len(self.action_queue) == 0:
-            print("I did it !")
+            rospy.loginfo("I did it !")
             sys.exit(0)
         action = self.action_queue.pop(0)
-        self.target = action["dumbbell"]
+        self.db_target = action["dumbbell"]
         self.block_target = str(action["block"])
         
     def set_velocity(self, linear, angular):
+        """
+        Set the velocity of the robot
+        """
         vel_msg = Twist()
         vel_msg.linear.x = linear
         vel_msg.angular.z = angular
         self.cmd_vel_pub.publish(vel_msg)
 
     def run(self):
-        if not self.initialize:
-            return 
+        """
+        Execute the logic for the current state
+        """
         r = rospy.Rate(2)
         while not rospy.is_shutdown():
-            if self.state == "dumbell":
-                if self.target_on_screen:
-                    if(self.target_distance <= 0.23):
+            if self.state == "dumbbell":
+                # In the dumbbell state, the robot will look for
+                # and move to the target dumbbell. Once close enough,
+                # it will pick it up and transition to the `point_toward_block` state
+                if self.target_db_visible:
+                    if(self.front_distance <= 0.23):
                         # pick up dumbbell
                         self.set_velocity(0, 0)
                         self.raise_arm()
-                        self.state = "block"
-                        #pick up , change states 
+                        self.state = "point_toward_block"
                     else:  
                         # Proportional control to point at dumbbell
                         linear = 0
-                        angular = min(0.2, self.target_angle * 0.003)
-                        # Move towards dumbbell
-                        if abs(self.target_angle) < 5 or (self.target_distance > 1 and abs(self.target_angle) < 15):
-                            print("distance", self.target_distance)
-                            linear = 0.3 * (self.target_distance - 0.22) 
+                        angular = min(0.2, self.target_db_angle * 0.003)
+                        # Move towards dumbbell. When the robot is further away,
+                        # it can be more lenient with how close it is pointed, so 
+                        # we allow the angle to be 15 pixels. When it is closer,
+                        # it needs to be more accurate in order to pick up the
+                        # dumbbell, so we lower it to 5 pixels.
+                        if abs(self.target_db_angle) < 5 or (self.front_distance > 1 and abs(self.target_db_angle) < 15):
+                            linear = 0.3 * (self.front_distance - 0.22) 
                         self.set_velocity(linear, angular) 
                 else:
+                    # If the target dumbbell is not visible, just turn until the robot finds it
                     self.set_velocity(0, 0.4)
                 r.sleep()
-            elif self.state == "block":
+            elif self.state == "point_toward_block":
+                # In the point_toward_block state, the robot uses image recognition
+                # and proportional control to point itself towards the target block.
                 self.wait_for_image_recognition()
-                #now decide what to do w self.pred groups 
+
+                # Find the x positions of each number that 
+                # matches our target, and average all of them.
                 x_positions = []
                 for el in self.prediction_groups[0]:
                     if el[0] == self.block_target:
                         x_positions.append(sum(el[1][0:5,0])/4)
                 if len(x_positions) == 0:
+                    # If no target was found, assume it is on the
+                    # left side of the screen so the robot will
+                    # just turn left until it finds the number.
                     x_avr = 50
                 else:
                     x_avr = sum(x_positions)/len(x_positions)
-                err = self.width/2 - x_avr 
+                err = self.camera_width/2 - x_avr 
                 if (abs(err) < 50):
+                    # If pointing close enough to the block,
+                    # start moving forwards
                     self.state = "move_toward_block"
                     continue 
-                k = 0.003
-                self.set_velocity(0, err * k)
+                # Turn a bit, then stop and rerun image recognition
+                self.set_velocity(0, err * 0.003)
                 rospy.sleep(0.5)
                 self.set_velocity(0, 0)
                 rospy.sleep(0.5)
             elif self.state == "move_toward_block":
+                # In the move_toward_block state, the robot will
+                # use LIDAR to drive up to the block.
+
+                # Every 8 iterations of this state, switch back to 
+                # point_toward_block state to make sure the robot
+                # is still headed in the right direction.
                 self.move_to_block_counter += 1
-                if self.move_to_block_counter >= 8 and self.target_distance > 2:
+                if self.move_to_block_counter >= 8 and self.front_distance > 2:
                     self.move_to_block_counter = 0
                     self.set_velocity(0, 0)
-                    self.state = "block"
+                    self.state = "point_toward_block"
                     continue
-                if self.target_distance <= 0.7:
+
+                # If close enough to the block, transition 
+                # to the drop_db state
+                if self.front_distance <= 0.7:
                     self.set_velocity(0, 0)
                     self.state = "drop_db"
                     continue  
-                err = self.target_distance - 0.6
-                k = 0.1
-                self.set_velocity(err * k, 0)
+
+                # Proportional control to move towards the block
+                err = self.front_distance - 0.6
+                self.set_velocity(err * 0.1, 0)
                 r.sleep()
             elif self.state == "drop_db":
+                # In the drop_db state, the robot will lower its arm,
+                # release the dumbbell, and then move on to the next action.
                 self.lower_arm()
                 self.set_velocity(-0.5, 0)
                 rospy.sleep(0.5)
                 self.set_velocity(0, 0)
-                self.state = "dumbell"
+                self.state = "dumbbell"
                 self.start_next_action()
                 rospy.sleep(0.5)
 
     def wait_for_image_recognition(self):
+        """
+        This will loop until the image recognition has run
+        """
         self.look_for_block = True
         while self.look_for_block:
             rospy.sleep(0.2)
 
     def raise_arm(self):
+        """
+        Close the gripper and raise the arm
+        """
         self.move_group_gripper.go([-0.00,-0.00], wait=True)
         rospy.sleep(0.5)
         self.move_group_arm.go([0,-0.7,0,0], wait=True)
 
     def lower_arm(self):
+        """
+        Lower the arm and release the gripper
+        """
         self.move_group_arm.go([0,0.7,0,-0.7], wait=True)
         self.move_group_gripper.go([0.01,0.01], wait=True)
 
     def lidar_callback(self, data):
-        if not self.initialize:
+        """
+        Average the LIDAR distances for a 10 angle
+        spead in front of the robot.
+        """
+        if not self.initialized:
             return 
         front_angles = [355 + x for x in range(5)] + [x for x in range(5)]
         distances = []
@@ -193,58 +253,63 @@ class Perception(object):
             if data.ranges[angle] < data.range_max:
                  distances.append(data.ranges[angle])
         if len(distances) == 0:
-            self.target_distance = data.range_max
+            self.front_distance = data.range_max
         else:
-            self.target_distance = sum(distances)/len(distances)
+            self.front_distance = sum(distances)/len(distances)
 
     def image_callback(self, msg):
-        if not self.initialize:
+        """
+        Upon receiving a camera image from the robot,
+        either look for a dumbbell, or run OCR, depending
+        on the state.
+        """
+        if not self.initialized:
             return 
         # converts the incoming ROS message to cv2 format and HSV (hue, saturation, value)
         image = self.bridge.imgmsg_to_cv2(msg,desired_encoding='bgr8')
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         h, w, d = image.shape
-        self.width = w 
+        self.camera_width = w 
 
-        if self.state == "dumbell":
-            if self.target == "blue":
+        if self.state == "dumbbell":
+            # In the dumbbell state, look for the current target
+            # dumbbell by color
+            if self.db_target == "blue":
                 lower = np.array([ 110, 50, 50])
                 upper = np.array([130, 255, 255])
-            elif self.target == "green":
+            elif self.db_target == "green":
                 lower = np.array([40,40,40])
                 upper = np.array([70,255,255])
-            elif self.target == "red":
+            elif self.db_target == "red":
                 lower = np.array([0, 50, 50])
                 upper = np.array([10, 255, 255])
 
-            blue_mask = cv2.inRange(hsv, lower, upper)
+            mask = cv2.inRange(hsv, lower, upper)
             h, w, d = image.shape
-            blue_mask[0:h//10, 0:w] = 0
-            M = cv2.moments(blue_mask)
+
+            # Cut off the top 10th of the camera, because the arm
+            # is there, and the red dot creates a false positive.
+            mask[0:h//10, 0:w] = 0
+            M = cv2.moments(mask)
             if M['m00'] > 0:
                 cx = int(M['m10']/M['m00'])
-                cy = int(M['m01']/M['m00'])
-
-                # the center point of the yellow pixels
-                cv2.circle(image, (cx, cy), 20, (0,0,255), -1)
-                self.target_angle = w/2 - cx
-                self.target_on_screen = True
+                self.target_db_angle = w/2 - cx
+                self.target_db_visible = True
             else:
-                self.target_on_screen = False
+                self.target_db_visible = False
 
-        elif self.state == "block":
-            # Set self.look_for_block to wait for
-            # image recognition to run
+        elif self.state == "point_toward_block":
+            # In the point_toward_block state, run OCR
+            # when requested to find the correct block.
+
+            # If OCR has not been requested, return now
             if not self.look_for_block:
                 return 
             self.prediction_groups = self.pipeline.recognize([image]) 
-            print(self.prediction_groups)
-       
             self.look_for_block = False 
         
-        
 if __name__ == '__main__':
-    p = Perception()
+    p = WeightLifter()
     rospy.spin()
 
