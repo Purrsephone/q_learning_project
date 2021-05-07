@@ -106,6 +106,7 @@ One area for improvement is in how the robot picks up the dumbbell. Currently, i
 
 * Keep track of magic numbers. We had a lot of magic numbers in our code. We would recommend avoiding magic numbers whenever possible, as they can lead to error and the only way to adjust them is through lots of trial and error. It's also hard to know if a hard-coded number is the cause of a bug or if the issue is deeper.  
 * Pair programming is good for staying on task. While there are pros and cons of pair programming, we found that we were very productive when working together for a set amount of time. It also allowed us to have more fluid code since we never merged anything. 
+* Restart your terminals periodically. Sometimes we spent a long time debugging correct code simply because ros was glitching. We recommend restarting after making major changes and when you think something should work but isn't. 
 
 
 
