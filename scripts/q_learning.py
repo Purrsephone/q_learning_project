@@ -8,7 +8,8 @@ import copy
 import time
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
-from q_learning_project.msg import RobotMoveDBToBlock, QLearningReward, QMatrix
+from q_learning_project.msg import RobotMoveDBToBlock, QLearningReward, QMatrix, QMatrixRow
+import sys
 
 # Path of directory on where this file is located
 path_prefix = os.path.dirname(__file__) + "/action_states/"
@@ -95,15 +96,16 @@ class QLearning(object):
         
         # Publish the matrix for grading
         matrix_msg = QMatrix()
-        matrix_msg.q_matrix = self.q_matrix.tolist()
+        matrix_msg.q_matrix = [QMatrixRow([int (y) for y in x]) for x in self.q_matrix.tolist()]
         self.matrix_publisher.publish(matrix_msg)
 
         if not self.is_converged(reward.iteration_num):
             self.train_one_iteration()
         else:
-            rospy.loginfo("converged")
+            rospy.logfatal("converged")
             rospy.loginfo(self.q_matrix)
             self.save_q_matrix()
+            sys.exit(0)
 
     def is_converged(self, iteration):
         """
@@ -150,7 +152,7 @@ class QLearning(object):
         """
         Save the QMatrix to a csv file
         """
-        np.savetxt("qmatrix.csv", self.q_matrix, delimiter=",")
+        np.savetxt(os.path.join(os.path.dirname(__file__), "qmatrix.csv"), self.q_matrix, delimiter=",")
 
 if __name__ == "__main__":
     node = QLearning()
