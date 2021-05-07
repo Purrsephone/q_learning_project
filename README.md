@@ -101,7 +101,12 @@ We had some difficulties with Gazebo, and would occasionally get inconsistent re
 ## Future work (1 paragraph): If you had more time, how would you improve your implementation?   
 One area for improvement is in how the robot picks up the dumbbell. Currently, it gets very close, and then nudges it a bit until it’s at the right angle to pick it up. Given more time, we could modify this so the robot can use it’s LIDAR to more effectively locate the dumbbell, and pick it up more smoothly. Another way we could improve the robot is speeding up the phase where it locates the numbered blocks. We could probably do this by finding a faster algorithm that simply recognizes if there are numbers present in the image, and use this to turn more quickly until the robot sees numbers. Once it sees some numbers, then it could run the more accurate OCR and slowly point towards the block.   
 
-## Takeaways (at least 2 bullet points with 2-3 sentences per bullet point): What are your key takeaways from this project that would help you/others in future robot programming assignments working in pairs? For each takeaway, provide a few sentences of elaboration.
+## Takeaways (at least 2 bullet points with 2-3 sentences per bullet point): What are your key takeaways from this project that would help you/others in future robot programming assignments working in pairs? For each takeaway, provide a few sentences of elaboration.  
+
+
+* Keep track of magic numbers. We had a lot of magic numbers in our code. We would recommend avoiding magic numbers whenever possible, as they can lead to error and the only way to adjust them is through lots of trial and error. It's also hard to know if a hard-coded number is the cause of a bug or if the issue is deeper.  
+* Pair programming is good for staying on task. While there are pros and cons of pair programming, we found that we were very productive when working together for a set amount of time. It also allowed us to have more fluid code since we never merged anything. 
+* Restart your terminals periodically. Sometimes we spent a long time debugging correct code simply because ros was glitching. We recommend restarting after making major changes and when you think something should work but isn't. 
 
 
 
