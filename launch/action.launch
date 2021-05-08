@@ -1,1 +1,7 @@
-<!-- TODO -->
+<launch>
+  <include file="$(find q_learning_project)/launch/turtlebot3_intro_robo_manipulation.launch" />
+
+  <include file="$(find turtlebot3_manipulation_moveit_config)/launch/move_group.launch" />
+
+  <node name="movement" pkg="q_learning_project" type="movement.py" respawn="false" />
+</launch>

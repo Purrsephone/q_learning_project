@@ -17,6 +17,8 @@ class WeightLifter(object):
         # set up ROS / cv bridge
         self.bridge = cv_bridge.CvBridge()
 
+        rospy.sleep(1)
+
         self.initialized = False 
 
         # Set up subscribers and publishers
