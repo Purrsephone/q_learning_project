@@ -16,9 +16,11 @@ class WeightLifter(object):
 
         # set up ROS / cv bridge
         self.bridge = cv_bridge.CvBridge()
-
+           
+        # wait for set up 
         rospy.sleep(1)
-
+        
+        # set to false before set up is complete 
         self.initialized = False 
 
         # Set up subscribers and publishers
@@ -73,9 +75,11 @@ class WeightLifter(object):
         # Create a matrix that takes a state, and the current action,
         # and computes the next state
         self.state_action = np.zeros([len(self.action_matrix), len(self.actions)])
+        # iterates through 2D array 
         for i in range(len(self.action_matrix)):
             for j in range(len(self.action_matrix[i])):
                   action = int(self.action_matrix[i][j])
+                  # skip if action not possible from state 
                   if action == -1:
                       continue
                   self.state_action[i][action] = j
@@ -84,14 +88,18 @@ class WeightLifter(object):
         # to perform
         self.action_queue = []
         current_state = 0
+        # iterate through 3 step action sequence 
         for i in range(3):
             options = qmatrix_arr[current_state]
             max_q = 0
             next_action = 0
+            # iterate through action options based on current state
             for i in range(len(options)):
+                # choose action with max q value 
                 if options[i] > max_q:
                     max_q = options[i]
                     next_action = i
+            # update current state and actions list 
             current_state = int(self.state_action[current_state][next_action])
             self.action_queue.append(self.actions[next_action])
         
@@ -106,6 +114,7 @@ class WeightLifter(object):
         """
         Load the next action from the queue
         """
+        # checks if action is complete 
         if len(self.action_queue) == 0:
             rospy.loginfo("I did it !")
             sys.exit(0)
@@ -127,17 +136,22 @@ class WeightLifter(object):
         Execute the logic for the current state
         """
         r = rospy.Rate(2)
+        # run continuously 
         while not rospy.is_shutdown():
             if self.state == "dumbbell":
                 # In the dumbbell state, the robot will look for
                 # and move to the target dumbbell. Once close enough,
                 # it will pick it up and transition to the `point_toward_block` state
+                # checks if dumbbell is in sight  
                 if self.target_db_visible:
+                    # checks if close enough to dumbbell 
+                    # we found 0.23 to be a good distance 
                     if(self.front_distance <= 0.23):
                         # pick up dumbbell
                         self.set_velocity(0, 0)
                         self.raise_arm()
                         self.state = "point_toward_block"
+                    # else, not close enough, keep moving toward dumbbell 
                     else:  
                         # Proportional control to point at dumbbell
                         linear = 0
@@ -162,6 +176,7 @@ class WeightLifter(object):
                 # Find the x positions of each number that 
                 # matches our target, and average all of them.
                 x_positions = []
+                # iterate through labeled predictions 
                 for el in self.prediction_groups[0]:
                     if el[0] == self.block_target:
                         x_positions.append(sum(el[1][0:5,0])/4)
@@ -171,6 +186,7 @@ class WeightLifter(object):
                     # just turn left until it finds the number.
                     x_avr = 50
                 else:
+                    # average the x positions 
                     x_avr = sum(x_positions)/len(x_positions)
                 err = self.camera_width/2 - x_avr 
                 if (abs(err) < 50):
@@ -247,15 +263,19 @@ class WeightLifter(object):
         Average the LIDAR distances for a 10 angle
         spead in front of the robot.
         """
+        # ensure that environment is ready before calling this func 
         if not self.initialized:
             return 
         front_angles = [355 + x for x in range(5)] + [x for x in range(5)]
         distances = []
+        # select small subset of angles to be the front 
         for angle in front_angles:
             if data.ranges[angle] < data.range_max:
                  distances.append(data.ranges[angle])
+        # nothing is in sight, set to front distance max range 
         if len(distances) == 0:
             self.front_distance = data.range_max
+        # else, average readings from subset of front angles 
         else:
             self.front_distance = sum(distances)/len(distances)
 
@@ -265,6 +285,7 @@ class WeightLifter(object):
         either look for a dumbbell, or run OCR, depending
         on the state.
         """
+        # ensure that environment is ready before calling this func 
         if not self.initialized:
             return 
         # converts the incoming ROS message to cv2 format and HSV (hue, saturation, value)
