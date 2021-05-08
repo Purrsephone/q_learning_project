@@ -98,9 +98,13 @@ class QLearning(object):
         matrix_msg = QMatrix()
         matrix_msg.q_matrix = [QMatrixRow([int (y) for y in x]) for x in self.q_matrix.tolist()]
         self.matrix_publisher.publish(matrix_msg)
-
+        
+        #check if q-matrix has converged 
+        
+        #if not, train another iteration 
         if not self.is_converged(reward.iteration_num):
             self.train_one_iteration()
+        #if so, stop training, save q matrix to file, and exit 
         else:
             rospy.logfatal("converged")
             rospy.loginfo(self.q_matrix)
@@ -122,8 +126,10 @@ class QLearning(object):
         previous = self.previous_matrices[-10:-1]
         for m in previous:
             difference = abs(m - most_recent).max()
+            #check if there's a significant difference, not converged 
             if difference > self.convergence_threshold:
                 return False
+        #else, is converged 
         return True
 
     def train_one_iteration(self):
@@ -132,8 +138,7 @@ class QLearning(object):
         """        
         possible_actions = [(i, int(x)) for i, x in enumerate(self.action_matrix[self.current_state]) if x != -1]
         # If there are no possible actions, then restart
-        # from the beginning. Otherwise, pick an action
-        # and publish it. Once the reward is received,
+        # from the beginning. Once the reward is received,
         # the next iteration will be started by the 
         # get_reward function
         if len(possible_actions) == 0:
@@ -141,6 +146,8 @@ class QLearning(object):
             self.current_state = 0
             self.current_action = 0
             self.train_one_iteration()
+       # Otherwise, pick an action
+       # and publish it.   
         else:
             self.next_state, self.current_action = random.choice(possible_actions)
             action_msg = RobotMoveDBToBlock()
