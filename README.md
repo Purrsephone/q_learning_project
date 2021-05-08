@@ -44,7 +44,10 @@ answers.
 ## Timeline
 
 We plan to finish the Q-learning portion by May 1st, and then complete the 
-movement and navigation by May 7th.
+movement and navigation by May 7th.   
+
+
+![robot brings dumbbells to block](https://github.com/Purrsephone/q_learning_project/blob/master/scripts/finalfinal.gif)
 
 
 # Write-Up 
