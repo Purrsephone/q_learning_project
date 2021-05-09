@@ -186,7 +186,7 @@ class WeightLifter(object):
                     # just turn left until it finds the number.
                     x_avr = 50
                 else:
-                    # average the x positions 
+                    # average the x positions if a target was found 
                     x_avr = sum(x_positions)/len(x_positions)
                 err = self.camera_width/2 - x_avr 
                 if (abs(err) < 50):
@@ -240,6 +240,7 @@ class WeightLifter(object):
         This will loop until the image recognition has run
         """
         self.look_for_block = True
+        #repeat until we have found block 
         while self.look_for_block:
             rospy.sleep(0.2)
 
@@ -298,12 +299,15 @@ class WeightLifter(object):
         if self.state == "dumbbell":
             # In the dumbbell state, look for the current target
             # dumbbell by color
+            # looking for blue db 
             if self.db_target == "blue":
                 lower = np.array([ 110, 50, 50])
                 upper = np.array([130, 255, 255])
+            # looking for green db 
             elif self.db_target == "green":
                 lower = np.array([40,40,40])
                 upper = np.array([70,255,255])
+            # looking for red db 
             elif self.db_target == "red":
                 lower = np.array([0, 50, 50])
                 upper = np.array([10, 255, 255])
@@ -315,10 +319,12 @@ class WeightLifter(object):
             # is there, and the red dot creates a false positive.
             mask[0:h//10, 0:w] = 0
             M = cv2.moments(mask)
+            # check if target color in sight 
             if M['m00'] > 0:
                 cx = int(M['m10']/M['m00'])
                 self.target_db_angle = w/2 - cx
                 self.target_db_visible = True
+            # target color is not in sight 
             else:
                 self.target_db_visible = False
 
